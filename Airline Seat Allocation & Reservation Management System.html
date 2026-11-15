@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BharatAir | Airline Seat Allocation & Reservation System</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        },
+                        gold: {
+                            500: '#d97706',
+                            600: '#b45309',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom Scrollbar for Cabin Layout */
+        .cabin-scroll::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .cabin-scroll::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 8px;
+        }
+        .cabin-scroll::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 8px;
+        }
+        .cabin-scroll::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Plane Fuselage Curves */
+        .fuselage-nose {
+            border-top-left-radius: 140px 200px;
+            border-top-right-radius: 140px 200px;
+        }
+
+        .seat-glow-selected {
+            box-shadow: 0 0 14px rgba(37, 99, 235, 0.7);
+        }
+
+        /* Boarding pass print layout */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-boarding-pass, #printable-boarding-pass * {
+                visibility: visible;
+            }
+            #printable-boarding-pass {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-blue-50/40 to-slate-100 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Brand & Logo -->
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('booking')">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-md">
+                    <i class="fa-solid fa-plane-departure"></i>
+                </div>
+                <div>
+                    <span class="text-xl font-black tracking-tight text-slate-900">BHARAT<span class="text-brand-600">AIR</span></span>
+                    <span class="block text-[11px] text-slate-500 font-semibold tracking-wide uppercase">Seat Allocation & Management Engine</span>
+                </div>
+            </div>
+
+            <!-- Currency Selector & Navigation Tabs -->
+            <div class="flex items-center space-x-3 sm:space-x-5">
+                <!-- Currency Selector -->
+                <div class="flex items-center space-x-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl shadow-inner">
+                    <i class="fa-solid fa-coins text-amber-500 text-xs"></i>
+                    <label for="currency-select" class="text-xs font-semibold text-slate-600 uppercase tracking-wider hidden sm:inline">Currency:</label>
+                    <select id="currency-select" onchange="changeCurrency(this.value)" class="bg-white text-brand-700 text-xs font-bold rounded-lg px-2 py-1 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <option value="INR" selected>₹ INR (Rupees)</option>
+                        <option value="USD">$ USD (US Dollar)</option>
+                        <option value="EUR">€ EUR (Euro)</option>
+                        <option value="GBP">£ GBP (Pound)</option>
+                        <option value="AED">AED (Dirham)</option>
+                    </select>
+                </div>
+
+                <!-- Tab Links -->
+                <nav class="flex space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <button id="tab-btn-booking" onclick="switchTab('booking')" class="px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition bg-white text-brand-700 shadow-sm border border-slate-200">
+                        <i class="fa-solid fa-couch mr-1"></i> Seat Map
+                    </button>
+                    <button id="tab-btn-manage" onclick="switchTab('manage')" class="px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+                        <i class="fa-solid fa-address-card mr-1"></i> Manage PNR
+                    </button>
+                    <button id="tab-btn-analytics" onclick="switchTab('analytics')" class="px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+                        <i class="fa-solid fa-chart-pie mr-1"></i> Analytics
+                    </button>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <!-- Toast Alert Notification -->
+        <div id="toast-container" class="fixed top-20 right-5 z-50 transition-all duration-300 pointer-events-none transform translate-y-[-20px] opacity-0">
+            <div class="bg-white border-l-4 border-brand-600 text-slate-900 px-5 py-3 rounded-xl shadow-xl flex items-center space-x-3 border border-slate-200">
+                <i id="toast-icon" class="fa-solid fa-circle-info text-brand-600 text-lg"></i>
+                <div>
+                    <h5 id="toast-title" class="font-bold text-xs uppercase tracking-wider text-slate-800">Notification</h5>
+                    <p id="toast-msg" class="text-xs text-slate-600">Action performed successfully.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 1: BOOKING & SEAT ALLOCATION SELECTION -->
+        <section id="tab-content-booking" class="space-y-6">
+            
+            <!-- Flight Route Header Banner Card with Travel Image -->
+            <div class="relative rounded-2xl overflow-hidden shadow-md border border-slate-200 bg-white">
+                <div class="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/70 to-slate-900/40 z-10"></div>
+                <img id="route-banner-img" src="https://images.unsplash.com/photo-1542296332-2e4473faf563?auto=format&fit=crop&w=1400&q=80" alt="Flight Route" class="w-full h-44 object-cover object-center">
+                
+                <div class="absolute inset-0 z-20 p-6 flex flex-col justify-between text-white">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-brand-300">
+                                <span id="summary-flight-no" class="bg-brand-600/80 text-white px-2.5 py-0.5 rounded-full border border-brand-400/40">AI-803</span>
+                                <span>• Scheduled Flight</span>
+                            </div>
+                            <h2 id="summary-route" class="text-2xl sm:text-3xl font-black mt-1">Delhi (DEL) <i class="fa-solid fa-arrow-right text-brand-400 text-lg mx-2"></i> Mumbai (BOM)</h2>
+                            <p id="summary-aircraft" class="text-xs text-slate-300">Airbus A350-900 • Widebody</p>
+                        </div>
+
+                        <div class="flex items-center space-x-6 text-sm bg-black/40 backdrop-blur-md p-3 rounded-xl border border-white/10">
+                            <div class="text-center">
+                                <span id="summary-dep-time" class="block font-bold text-slate-100">07:00</span>
+                                <span id="summary-dep-code" class="text-[11px] text-slate-300">DEL T3</span>
+                            </div>
+                            <div class="flex flex-col items-center">
+                                <span id="summary-duration" class="text-[11px] text-brand-300 font-mono">2h 15m</span>
+                                <div class="w-20 h-0.5 bg-slate-400/60 relative my-1">
+                                    <i class="fa-solid fa-plane text-brand-400 text-xs absolute left-1/2 -top-1.5 -translate-x-1/2"></i>
+                                </div>
+                                <span class="text-[10px] text-emerald-400 font-bold">Non-Stop</span>
+                            </div>
+                            <div class="text-center">
+                                <span id="summary-arr-time" class="block font-bold text-slate-100">09:15</span>
+                                <span id="summary-arr-code" class="text-[11px] text-slate-300">BOM T2</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flight Search & Filter Bar -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Flight Route</label>
+                        <select id="route-select" onchange="updateFlightDetails()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="AI-803">DEL (Delhi) ➔ BOM (Mumbai)</option>
+                            <option value="6E-512">BLR (Bengaluru) ➔ DEL (Delhi)</option>
+                            <option value="AI-401">BOM (Mumbai) ➔ MAA (Chennai)</option>
+                            <option value="UK-728">CCU (Kolkata) ➔ HYD (Hyderabad)</option>
+                            <option value="AI-995">DEL (Delhi) ➔ DXB (Dubai)</option>
+                            <option value="AI-131">BOM (Mumbai) ➔ LHR (London Heathrow)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Departure Date</label>
+                        <input type="date" id="flight-date" value="2026-11-15" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Seat Preference</label>
+                        <select id="filter-preference" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500">
+                            <option value="ALL">Any Available Seat</option>
+                            <option value="WINDOW">Window Seats Only</option>
+                            <option value="AISLE">Aisle Seats Only</option>
+                            <option value="EXTRA_LEGROOM">Extra Legroom Seats</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-end">
+                        <button onclick="autoAssignSeat()" class="w-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-md transition flex items-center justify-center space-x-2 text-xs">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            <span>Smart Auto-Assign</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Cabin Seat Allocation & Passenger Details Layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- Left Column: Interactive Seat Map Visualizer -->
+                <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col items-center">
+                    
+                    <!-- Legend Header Bar -->
+                    <div class="w-full max-w-xl flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200 mb-6 text-xs font-medium">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-4 h-4 rounded border border-slate-300 bg-white"></div>
+                            <span class="text-slate-600">Available</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-4 h-4 rounded bg-brand-600 border border-brand-700 shadow-sm"></div>
+                            <span class="text-slate-900 font-bold">Selected</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-4 h-4 rounded bg-red-100 border border-red-300 text-red-500 flex items-center justify-center text-[9px]"><i class="fa-solid fa-lock"></i></div>
+                            <span class="text-slate-600">Occupied</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-4 h-4 rounded bg-amber-400 border border-amber-500"></div>
+                            <span class="text-slate-600">First Suite</span>
+                        </div>
+                    </div>
+
+                    <!-- Plane Cockpit Visual Top -->
+                    <div class="w-full max-w-md cabin-scroll overflow-x-auto py-2">
+                        <div class="min-w-[340px] flex flex-col items-center">
+                            
+                            <!-- Nose cone representation -->
+                            <div class="w-48 h-16 bg-slate-200 border-2 border-b-0 border-slate-300 fuselage-nose flex flex-col items-center justify-end pb-2 shadow-inner">
+                                <div class="w-16 h-2 bg-slate-400 rounded-full mb-1"></div>
+                                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">COCKPIT</span>
+                            </div>
+
+                            <!-- Aircraft Main Fuselage Box -->
+                            <div class="w-full bg-slate-100 border-2 border-slate-300 rounded-b-3xl p-6 shadow-inner space-y-6">
+
+                                <!-- FIRST CLASS SUITES SECTION -->
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between border-b border-amber-300 pb-1">
+                                        <span class="text-[11px] font-black text-amber-700 uppercase tracking-widest"><i class="fa-solid fa-crown text-amber-500 mr-1"></i> First Class Suites</span>
+                                        <span id="price-badge-first" class="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-200">+₹28,000</span>
+                                    </div>
+                                    <div id="first-class-rows" class="space-y-3 pt-2">
+                                        <!-- Dynamic First Class Rows Rendered Here -->
+                                    </div>
+                                </div>
+
+                                <!-- BUSINESS CLASS SECTION -->
+                                <div class="space-y-2 pt-2 border-t border-slate-300">
+                                    <div class="flex items-center justify-between border-b border-indigo-200 pb-1">
+                                        <span class="text-[11px] font-black text-indigo-700 uppercase tracking-widest"><i class="fa-solid fa-briefcase text-indigo-500 mr-1"></i> Business Class</span>
+                                        <span id="price-badge-business" class="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded border border-indigo-200">+₹12,000</span>
+                                    </div>
+                                    <div id="business-class-rows" class="space-y-3 pt-2">
+                                        <!-- Dynamic Business Rows Rendered Here -->
+                                    </div>
+                                </div>
+
+                                <!-- ECONOMY CLASS SECTION -->
+                                <div class="space-y-2 pt-2 border-t border-slate-300">
+                                    <div class="flex items-center justify-between border-b border-slate-300 pb-1">
+                                        <span class="text-[11px] font-black text-slate-700 uppercase tracking-widest"><i class="fa-solid fa-couch text-slate-500 mr-1"></i> Economy Cabin</span>
+                                        <span id="price-badge-economy" class="text-[10px] bg-slate-200 text-slate-800 font-bold px-2 py-0.5 rounded border border-slate-300">Standard</span>
+                                    </div>
+                                    <div id="economy-class-rows" class="space-y-2 pt-2">
+                                        <!-- Dynamic Economy Rows Rendered Here -->
+                                    </div>
+                                </div>
+
+                            </div>
+                            
+                            <!-- Tail wing tail visual end -->
+                            <div class="w-32 h-8 bg-slate-300 border-2 border-t-0 border-slate-400 rounded-b-xl flex items-center justify-center mt-1">
+                                <span class="text-[9px] text-slate-600 font-bold uppercase tracking-widest">GALLEY / TAIL</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right Column: Seat Details & Passenger Checkout -->
+                <div class="lg:col-span-5 space-y-6">
+                    
+                    <!-- Selected Seat Details Card with Cabin Photo Preview -->
+                    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-slate-900 text-base">Selected Seat Overview</h3>
+                            <span id="badge-selected-count" class="bg-brand-50 text-brand-700 font-bold text-xs px-2.5 py-1 rounded-full border border-brand-200">0 Seats Selected</span>
+                        </div>
+
+                        <div id="seat-card-empty" class="text-center py-8 px-4 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
+                            <i class="fa-solid fa-couch text-slate-400 text-3xl mb-2"></i>
+                            <p class="text-xs text-slate-600 font-medium">No seat chosen yet</p>
+                            <p class="text-[11px] text-slate-400 mt-1">Click on any available seat on the map or use Auto-Assign.</p>
+                        </div>
+
+                        <div id="seat-card-active" class="hidden space-y-3">
+                            <!-- Class Photo Image Preview -->
+                            <div class="relative h-28 rounded-xl overflow-hidden shadow-sm border border-slate-200">
+                                <img id="cabin-img-preview" src="https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=600&q=80" alt="Cabin preview" class="w-full h-full object-cover">
+                                <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
+                                <div class="absolute bottom-2 left-3 right-3 flex items-end justify-between text-white">
+                                    <div>
+                                        <div id="seat-card-class" class="font-bold text-sm">Business Class Suite</div>
+                                        <div id="seat-card-type" class="text-[11px] text-slate-200">Window Seat • Lie-Flat Bed</div>
+                                    </div>
+                                    <div id="seat-card-no" class="w-10 h-10 rounded-xl bg-brand-600 text-white font-black text-lg flex items-center justify-center shadow-md">
+                                        12A
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+                                <span class="font-semibold text-slate-600">Seat Selection Fee</span>
+                                <span id="seat-card-price" class="font-bold text-brand-700 text-sm">+₹12,000</span>
+                            </div>
+
+                            <div>
+                                <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Included Perks</div>
+                                <div id="seat-card-perks" class="flex flex-wrap gap-1.5 text-[11px]">
+                                    <!-- Dynamic perk pills -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Passenger Input & Price Summary Form -->
+                    <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-900 text-base border-b border-slate-100 pb-3">Passenger Information (Indian Format)</h3>
+
+                        <div class="space-y-3">
+                            <!-- Name Title & First/Middle/Surname -->
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-3">
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">Title</label>
+                                    <select id="passenger-title" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                        <option value="Mr.">Mr.</option>
+                                        <option value="Ms.">Ms.</option>
+                                        <option value="Mrs.">Mrs.</option>
+                                        <option value="Dr.">Dr.</option>
+                                    </select>
+                                </div>
+                                <div class="col-span-9">
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">First Name *</label>
+                                    <input type="text" id="passenger-firstname" placeholder="e.g. Aarav" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">Middle Name (Optional)</label>
+                                    <input type="text" id="passenger-middlename" placeholder="e.g. Kumar" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">Surname / Last Name *</label>
+                                    <input type="text" id="passenger-lastname" placeholder="e.g. Sharma" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                </div>
+                            </div>
+
+                            <!-- Identification Type & ID Number -->
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">Govt ID Type</label>
+                                    <select id="passenger-idtype" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                        <option value="Aadhaar Card">Aadhaar Card</option>
+                                        <option value="Passport">Passport</option>
+                                        <option value="PAN Card">PAN Card</option>
+                                        <option value="Voter ID">Voter ID</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">ID Card Number</label>
+                                    <input type="text" id="passenger-idnum" placeholder="XXXX-XXXX-1234" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">Mobile (+91)</label>
+                                    <input type="text" id="passenger-id" placeholder="+91 98765 43210" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-500 mb-1">Loyalty Tier</label>
+                                    <select id="passenger-loyalty" onchange="calculatePrices()" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                        <option value="NONE">Standard Guest</option>
+                                        <option value="SILVER">Club Vistara / Flying Returns Silver (5% off)</option>
+                                        <option value="GOLD">Club Vistara Gold / Maharajah (10% off)</option>
+                                        <option value="PLATINUM">Platinum Elite (15% off)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">Meal Preference</label>
+                                <select id="passenger-meal" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                                    <option value="Hindu Non-Veg">Hindu Non-Vegetarian Gourmet</option>
+                                    <option value="Vegetarian Jain">Jain Special Meal (No Onion/Garlic)</option>
+                                    <option value="North Indian Veg">North Indian Vegetarian Thali</option>
+                                    <option value="South Indian Veg">South Indian Special Meal</option>
+                                    <option value="Diabetic Meal">Diabetic / Low Salt Special</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Price Breakdown Ledger -->
+                        <div class="border-t border-slate-200 pt-4 space-y-2 text-xs">
+                            <div class="flex justify-between text-slate-600">
+                                <span>Base Flight Fare</span>
+                                <span id="price-base" class="font-medium text-slate-800">₹5,500.00</span>
+                            </div>
+                            <div class="flex justify-between text-slate-600">
+                                <span>Seat Selection Fee</span>
+                                <span id="price-seat" class="font-medium text-slate-800">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between text-slate-600">
+                                <span>GST & Airport Fees (18%)</span>
+                                <span id="price-taxes" class="font-medium text-slate-800">₹990.00</span>
+                            </div>
+                            <div id="row-discount" class="flex justify-between text-emerald-600 font-medium hidden">
+                                <span>Loyalty Discount</span>
+                                <span id="price-discount">-₹0.00</span>
+                            </div>
+                            <div class="flex justify-between font-extrabold text-sm text-slate-900 pt-2 border-t border-slate-200">
+                                <span>Total Booking Price</span>
+                                <span id="price-total" class="text-brand-600 text-base">₹6,490.00</span>
+                            </div>
+                        </div>
+
+                        <!-- Reserve Action Button -->
+                        <button onclick="confirmBooking()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center space-x-2 text-xs">
+                            <i class="fa-solid fa-ticket"></i>
+                            <span>Confirm & Reserve Flight</span>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: MANAGE PNR & SEARCH RESERVATIONS -->
+        <section id="tab-content-manage" class="hidden space-y-6">
+            <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-900">Reservation Lookup & Seat Modification</h2>
+                        <p class="text-xs text-slate-500">Search active booking records using PNR code or passenger surname.</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="pnr-search-input" placeholder="Enter PNR (e.g. IN89X2)" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase">
+                        <button onclick="searchPNR()" class="bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition">
+                            <i class="fa-solid fa-magnifying-glass mr-1"></i> Search
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Bookings Data Table -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider border-b border-slate-200">
+                                <th class="p-3">PNR Code</th>
+                                <th class="p-3">Passenger Name</th>
+                                <th class="p-3">Flight</th>
+                                <th class="p-3">Seat No</th>
+                                <th class="p-3">Cabin Class</th>
+                                <th class="p-3">Flight Date</th>
+                                <th class="p-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bookings-tbody" class="divide-y divide-slate-100">
+                            <!-- Dynamic rows rendered here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: ADMIN ANALYTICS DASHBOARD -->
+        <section id="tab-content-analytics" class="hidden space-y-6">
+            
+            <!-- Overview KPI Summary Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center space-x-4">
+                    <div class="w-12 h-12 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600 text-xl font-bold">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-semibold text-slate-500 uppercase">Cabin Load Factor</span>
+                        <span id="kpi-load-factor" class="text-2xl font-black text-slate-900">68.4%</span>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center space-x-4">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 text-xl font-bold">
+                        <i class="fa-solid fa-indian-rupee-sign"></i>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-semibold text-slate-500 uppercase">Gross Revenue</span>
+                        <span id="kpi-total-revenue" class="text-2xl font-black text-slate-900">₹2,48,500</span>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center space-x-4">
+                    <div class="w-12 h-12 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 text-xl font-bold">
+                        <i class="fa-solid fa-couch"></i>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-semibold text-slate-500 uppercase">Seats Reserved</span>
+                        <span id="kpi-seats-reserved" class="text-2xl font-black text-slate-900">26 / 38</span>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center space-x-4">
+                    <div class="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 text-xl font-bold">
+                        <i class="fa-solid fa-crown"></i>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-semibold text-slate-500 uppercase">Premium Occupancy</span>
+                        <span id="kpi-premium-occupancy" class="text-2xl font-black text-slate-900">85.7%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cabin Breakdown Charts & Occupancy Progress -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Class Distribution Card -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-900 text-base">Seat Capacity & Occupancy per Cabin</h3>
+
+                    <!-- First Class Bar -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-amber-700 font-bold">First Class Suites (+₹28,000)</span>
+                            <span id="stat-first-occupancy" class="text-slate-600 font-medium">4 / 4 Occupied (100%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200">
+                            <div id="bar-first-occupancy" class="bg-amber-500 h-full rounded-full transition-all duration-500" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Business Class Bar -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-indigo-700 font-bold">Business Class (+₹12,000)</span>
+                            <span id="stat-business-occupancy" class="text-slate-600 font-medium">8 / 10 Occupied (80%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200">
+                            <div id="bar-business-occupancy" class="bg-indigo-600 h-full rounded-full transition-all duration-500" style="width: 80%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Economy Class Bar -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-brand-700 font-bold">Economy Class (+₹0)</span>
+                            <span id="stat-economy-occupancy" class="text-slate-600 font-medium">14 / 24 Occupied (58.3%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200">
+                            <div id="bar-economy-occupancy" class="bg-brand-500 h-full rounded-full transition-all duration-500" style="width: 58.3%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Aircraft Fleet Operational Metrics -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <h3 class="font-bold text-slate-900 text-base">Popular Flight Destination Routes</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <img src="https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=100&q=80" alt="Delhi" class="w-10 h-10 rounded-lg object-cover">
+                                <div>
+                                    <div class="font-bold text-xs text-slate-800">DEL ➔ BOM</div>
+                                    <div class="text-[10px] text-slate-500">Delhi to Mumbai</div>
+                                </div>
+                            </div>
+                            <span class="bg-brand-50 text-brand-700 font-bold text-xs px-2 py-1 rounded-md border border-brand-200">88% Load</span>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <img src="https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=100&q=80" alt="Bengaluru" class="w-10 h-10 rounded-lg object-cover">
+                                <div>
+                                    <div class="font-bold text-xs text-slate-800">BLR ➔ DEL</div>
+                                    <div class="text-[10px] text-slate-500">Bengaluru to Delhi</div>
+                                </div>
+                            </div>
+                            <span class="bg-brand-50 text-brand-700 font-bold text-xs px-2 py-1 rounded-md border border-brand-200">92% Load</span>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <div class="flex items-center space-x-3">
+                                <img src="https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=100&q=80" alt="Dubai" class="w-10 h-10 rounded-lg object-cover">
+                                <div>
+                                    <div class="font-bold text-xs text-slate-800">DEL ➔ DXB</div>
+                                    <div class="text-[10px] text-slate-500">Delhi to Dubai</div>
+                                </div>
+                            </div>
+                            <span class="bg-emerald-50 text-emerald-700 font-bold text-xs px-2 py-1 rounded-md border border-emerald-200">97% Load</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- BOARDING PASS MODAL -->
+    <div id="modal-boarding-pass" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden">
+        <div class="relative w-full max-w-2xl bg-white rounded-2xl overflow-hidden shadow-2xl border border-slate-200">
+            
+            <button onclick="closeBoardingPass()" class="absolute top-3 right-3 text-slate-400 hover:text-slate-700 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center z-10 transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div id="printable-boarding-pass" class="bg-gradient-to-r from-slate-900 to-slate-800 text-white">
+                <div class="bg-brand-600 px-6 py-3 border-b border-brand-700 flex justify-between items-center">
+                    <div class="flex items-center space-x-2">
+                        <i class="fa-solid fa-plane-departure text-white"></i>
+                        <span class="font-black tracking-wider text-sm">BHARAT AIRWAYS</span>
+                    </div>
+                    <span id="bp-class-tag" class="bg-white/20 text-white font-bold text-xs px-3 py-0.5 rounded-full uppercase border border-white/30">
+                        BUSINESS CLASS
+                    </span>
+                </div>
+
+                <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                    <div class="md:col-span-2 space-y-4">
+                        <div>
+                            <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Passenger Name</span>
+                            <div id="bp-passenger-name" class="font-extrabold text-lg text-white">Mr. Aarav Sharma</div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block">Flight</span>
+                                <span id="bp-flight-no" class="font-bold text-slate-100">AI-803</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block">Date</span>
+                                <span id="bp-date" class="font-bold text-slate-100">15 NOV 2026</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block">Boarding Time</span>
+                                <span id="bp-boarding-time" class="font-bold text-brand-400">06:15 AM</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between border-t border-slate-700 pt-3 text-xs">
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block">From</span>
+                                <span id="bp-from" class="font-bold text-white">DEL (Delhi)</span>
+                            </div>
+                            <i class="fa-solid fa-arrow-right text-brand-400"></i>
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block">To</span>
+                                <span id="bp-to" class="font-bold text-white">BOM (Mumbai)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Seat Badge & Simulated Barcode -->
+                    <div class="bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/10 flex flex-col items-center justify-center text-center">
+                        <span class="text-[10px] uppercase text-slate-300 tracking-wider">Assigned Seat</span>
+                        <div id="bp-seat-no" class="text-4xl font-black text-brand-300 my-1">12A</div>
+                        <span id="bp-pnr" class="text-xs font-mono bg-black/40 px-2 py-1 rounded text-slate-300">PNR: IN89X2</span>
+
+                        <!-- Dynamic Simulated Barcode Visual -->
+                        <div class="mt-3 flex space-x-1 h-8 items-center bg-white p-1 rounded">
+                            <div class="w-1 h-full bg-slate-900"></div>
+                            <div class="w-2 h-full bg-slate-900"></div>
+                            <div class="w-0.5 h-full bg-slate-900"></div>
+                            <div class="w-1.5 h-full bg-slate-900"></div>
+                            <div class="w-1 h-full bg-slate-900"></div>
+                            <div class="w-2 h-full bg-slate-900"></div>
+                            <div class="w-0.5 h-full bg-slate-900"></div>
+                            <div class="w-1.5 h-full bg-slate-900"></div>
+                            <div class="w-1 h-full bg-slate-900"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-3 border-t border-slate-200 flex justify-between items-center">
+                <span class="text-xs text-slate-500"><i class="fa-solid fa-circle-info mr-1"></i> Please carry valid Govt ID to airport.</span>
+                <button onclick="window.print()" class="bg-brand-600 hover:bg-brand-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-md transition flex items-center space-x-1">
+                    <i class="fa-solid fa-print"></i>
+                    <span>Print Pass</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        /* ==========================================================================
+           1. DATA MODELS, CURRENCY ENGINE & INITIAL STATE
+           ========================================================================== */
+
+        const CURRENCIES = {
+            INR: { symbol: '₹', rate: 1.0, code: 'INR' },
+            USD: { symbol: '$', rate: 1 / 83.0, code: 'USD' },
+            EUR: { symbol: '€', rate: 1 / 90.0, code: 'EUR' },
+            GBP: { symbol: '£', rate: 1 / 105.0, code: 'GBP' },
+            AED: { symbol: 'AED ', rate: 1 / 22.6, code: 'AED' }
+        };
+
+        let currentCurrency = 'INR';
+
+        function formatMoney(amountInINR) {
+            const curr = CURRENCIES[currentCurrency];
+            const converted = amountInINR * curr.rate;
+            if (currentCurrency === 'INR') {
+                return `${curr.symbol}${Math.round(converted).toLocaleString('en-IN')}`;
+            }
+            return `${curr.symbol}${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        function changeCurrency(newCurr) {
+            if (CURRENCIES[newCurr]) {
+                currentCurrency = newCurr;
+                updateFlightDetails();
+                updateSeatInfoCard();
+                calculatePrices();
+                renderCabinMap();
+                renderBookingsTable();
+                updateAnalytics();
+                showToast("Currency Updated", `Display currency set to ${newCurr}.`, "fa-coins");
+            }
+        }
+
+        const FLIGHTS = {
+            "AI-803": { flightNo: "AI-803", from: "DEL", to: "BOM", depTime: "07:00", arrTime: "09:15", duration: "2h 15m", baseFare: 5500, aircraft: "Airbus A350-900", image: "https://images.unsplash.com/photo-1542296332-2e4473faf563?auto=format&fit=crop&w=1400&q=80" },
+            "6E-512": { flightNo: "6E-512", from: "BLR", to: "DEL", depTime: "11:30", arrTime: "14:15", duration: "2h 45m", baseFare: 4800, aircraft: "Airbus A321neo", image: "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=1400&q=80" },
+            "AI-401": { flightNo: "AI-401", from: "BOM", to: "MAA", depTime: "16:45", arrTime: "18:40", duration: "1h 55m", baseFare: 4200, aircraft: "Boeing 787-9 Dreamliner", image: "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=1400&q=80" },
+            "UK-728": { flightNo: "UK-728", from: "CCU", to: "HYD", depTime: "19:10", arrTime: "21:20", duration: "2h 10m", baseFare: 3900, aircraft: "Airbus A320neo", image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1400&q=80" },
+            "AI-995": { flightNo: "AI-995", from: "DEL", to: "DXB", depTime: "20:00", arrTime: "22:30", duration: "4h 00m", baseFare: 14500, aircraft: "Boeing 787-9 Dreamliner", image: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=1400&q=80" },
+            "AI-131": { flightNo: "AI-131", from: "BOM", to: "LHR", depTime: "02:15", arrTime: "07:00", duration: "9h 15m", baseFare: 42000, aircraft: "Boeing 777-300ER", image: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=1400&q=80" }
+        };
+
+        const SEAT_DETAILS = {
+            "FIRST": { 
+                name: "First Class Suite", 
+                fee: 28000, 
+                perks: ["Private Suite Door", "Full Flat Bed", "Multi-Course Indian Thali", "Lounge Access"],
+                image: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80"
+            },
+            "BUSINESS": { 
+                name: "Business Class", 
+                fee: 12000, 
+                perks: ["180° Flatbed Pod", "Noise-Canceling Headphones", "Gourmet Hot Meals", "Priority Boarding"],
+                image: "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=600&q=80"
+            },
+            "ECONOMY_EXTRA": { 
+                name: "Economy Extra Legroom", 
+                fee: 1200, 
+                perks: ["4 Inches Extra Legroom", "Priority Boarding", "Complimentary Preferred Snack Box"],
+                image: "https://images.unsplash.com/photo-1506015391300-4802dc74de2e?auto=format&fit=crop&w=600&q=80"
+            },
+            "ECONOMY": { 
+                name: "Standard Economy", 
+                fee: 350, 
+                perks: ["Standard 32” Seat Pitch", "Personal HD Screen / USB", "Complimentary Beverage"],
+                image: "https://images.unsplash.com/photo-1506015391300-4802dc74de2e?auto=format&fit=crop&w=600&q=80"
+            }
+        };
+
+        let activeFlight = FLIGHTS["AI-803"];
+        let selectedSeatNo = null;
+        let seatsState = {};
+        let sampleBookings = [];
+
+        /* ==========================================================================
+           2. CABIN SEAT MATRIX GENERATOR (BOEING 787-9 / A350 ENGINE)
+           ========================================================================== */
+
+        function initSeatsState() {
+            seatsState = {};
+
+            // 1. First Class Suites (2 Rows: 1A, 1K, 2A, 2K)
+            ['1', '2'].forEach(row => {
+                ['A', 'K'].forEach(col => {
+                    const id = row + col;
+                    seatsState[id] = { seatNo: id, row: row, class: 'FIRST', occupied: false, pnr: null };
+                });
+            });
+
+            // 2. Business Class (3 Rows: 3, 4, 5 x A, D, G, K)
+            ['3', '4', '5'].forEach(row => {
+                ['A', 'D', 'G', 'K'].forEach(col => {
+                    const id = row + col;
+                    seatsState[id] = { seatNo: id, row: row, class: 'BUSINESS', occupied: false, pnr: null };
+                });
+            });
+
+            // 3. Economy Cabin (6 Rows: 6 to 11 x A, B, C, D, E, F)
+            ['6', '7', '8', '9', '10', '11'].forEach(row => {
+                const isExtraLegroom = (row === '6' || row === '9');
+                ['A', 'B', 'C', 'D', 'E', 'F'].forEach(col => {
+                    const id = row + col;
+                    seatsState[id] = { seatNo: id, row: row, class: 'ECONOMY', extraLegroom: isExtraLegroom, occupied: false, pnr: null };
+                });
+            });
+        }
+
+        function initMockBookings() {
+            sampleBookings = [
+                { pnr: "IN89X2", passenger: "Mr. Aarav Kumar Sharma", flightNo: "AI-803", seatNo: "3A", class: "Business Class", date: "2026-11-15", status: "CONFIRMED" },
+                { pnr: "IN44L9", passenger: "Dr. Priya Ramesh Patel", flightNo: "AI-803", seatNo: "1A", class: "First Class Suite", date: "2026-11-15", status: "CONFIRMED" },
+                { pnr: "IN77W1", passenger: "Mr. Rajesh Venkat Iyer", flightNo: "AI-803", seatNo: "6A", class: "Economy Extra Legroom", date: "2026-11-15", status: "CONFIRMED" },
+                { pnr: "IN22N8", passenger: "Ms. Ananya Sundaram Rao", flightNo: "AI-803", seatNo: "8D", class: "Standard Economy", date: "2026-11-15", status: "CONFIRMED" },
+                { pnr: "IN99V3", passenger: "Mr. Vikramaditya Singh Verma", flightNo: "AI-803", seatNo: "2K", class: "First Class Suite", date: "2026-11-15", status: "CONFIRMED" }
+            ];
+
+            sampleBookings.forEach(b => {
+                if (seatsState[b.seatNo]) {
+                    seatsState[b.seatNo].occupied = true;
+                    seatsState[b.seatNo].pnr = b.pnr;
+                }
+            });
+        }
+
+        /* ==========================================================================
+           3. UI RENDER ENGINES FOR LIGHT THEME CABIN MAP
+           ========================================================================== */
+
+        function renderCabinMap() {
+            // First Class Suites Container
+            const firstContainer = document.getElementById('first-class-rows');
+            firstContainer.innerHTML = '';
+            ['1', '2'].forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex items-center justify-around';
+
+                ['A', 'K'].forEach(col => {
+                    const seatId = row + col;
+                    rowDiv.appendChild(createSeatElement(seatId));
+                });
+                firstContainer.appendChild(rowDiv);
+            });
+
+            // Business Class Container
+            const businessContainer = document.getElementById('business-class-rows');
+            businessContainer.innerHTML = '';
+            ['3', '4', '5'].forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex items-center justify-between px-4';
+
+                const leftGroup = document.createElement('div');
+                leftGroup.className = 'flex space-x-2';
+                leftGroup.appendChild(createSeatElement(row + 'A'));
+                leftGroup.appendChild(createSeatElement(row + 'D'));
+
+                const rowLabel = document.createElement('span');
+                rowLabel.className = 'text-[10px] font-bold text-slate-400 w-4 text-center';
+                rowLabel.innerText = row;
+
+                const rightGroup = document.createElement('div');
+                rightGroup.className = 'flex space-x-2';
+                rightGroup.appendChild(createSeatElement(row + 'G'));
+                rightGroup.appendChild(createSeatElement(row + 'K'));
+
+                rowDiv.appendChild(leftGroup);
+                rowDiv.appendChild(rowLabel);
+                rowDiv.appendChild(rightGroup);
+                businessContainer.appendChild(rowDiv);
+            });
+
+            // Economy Class Container
+            const ecoContainer = document.getElementById('economy-class-rows');
+            ecoContainer.innerHTML = '';
+            ['6', '7', '8', '9', '10', '11'].forEach(row => {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex items-center justify-between';
+
+                const leftGroup = document.createElement('div');
+                leftGroup.className = 'flex space-x-1.5';
+                ['A', 'B', 'C'].forEach(col => leftGroup.appendChild(createSeatElement(row + col)));
+
+                const aisleLabel = document.createElement('span');
+                aisleLabel.className = 'text-[10px] font-bold text-slate-400 w-6 text-center';
+                aisleLabel.innerText = row;
+
+                const rightGroup = document.createElement('div');
+                rightGroup.className = 'flex space-x-1.5';
+                ['D', 'E', 'F'].forEach(col => rightGroup.appendChild(createSeatElement(row + col)));
+
+                rowDiv.appendChild(leftGroup);
+                rowDiv.appendChild(aisleLabel);
+                rowDiv.appendChild(rightGroup);
+                ecoContainer.appendChild(rowDiv);
+            });
+        }
+
+        function createSeatElement(seatId) {
+            const seat = seatsState[seatId];
+            const btn = document.createElement('button');
+            
+            let sizeClasses = "w-10 h-11 text-xs";
+            if (seat.class === 'FIRST') sizeClasses = "w-16 h-12 text-xs font-bold";
+            if (seat.class === 'BUSINESS') sizeClasses = "w-11 h-11 text-xs font-semibold";
+
+            let stateClasses = "bg-white border-slate-300 text-slate-700 hover:border-brand-500 shadow-sm";
+
+            if (seat.occupied) {
+                stateClasses = "bg-red-50 border-red-200 text-red-400 cursor-not-allowed opacity-80";
+            } else if (seatId === selectedSeatNo) {
+                stateClasses = "bg-brand-600 border-brand-700 text-white font-bold shadow-md seat-glow-selected";
+            } else if (seat.class === 'FIRST') {
+                stateClasses = "bg-gradient-to-b from-amber-50 to-amber-100 border-amber-300 text-amber-900 hover:border-amber-500 shadow-sm";
+            } else if (seat.extraLegroom) {
+                stateClasses = "bg-cyan-50 border-cyan-300 text-cyan-900 hover:border-cyan-500 shadow-sm";
+            }
+
+            btn.className = `${sizeClasses} ${stateClasses} rounded-lg border flex flex-col items-center justify-center transition-all duration-200 relative group`;
+            btn.onclick = () => handleSeatClick(seatId);
+
+            if (seat.occupied) {
+                btn.innerHTML = `<i class="fa-solid fa-lock text-[10px]"></i><span class="text-[9px] font-mono mt-0.5">${seatId}</span>`;
+            } else {
+                btn.innerHTML = `<span class="font-bold">${seatId}</span>`;
+            }
+
+            return btn;
+        }
+
+        /* ==========================================================================
+           4. USER INTERACTIONS & SEAT SELECTION
+           ========================================================================== */
+
+        function handleSeatClick(seatId) {
+            const seat = seatsState[seatId];
+            if (seat.occupied) {
+                showToast("Seat Occupied", `Seat ${seatId} is already reserved by PNR ${seat.pnr}.`, "fa-lock");
+                return;
+            }
+
+            if (selectedSeatNo === seatId) {
+                selectedSeatNo = null;
+            } else {
+                selectedSeatNo = seatId;
+            }
+
+            renderCabinMap();
+            updateSeatInfoCard();
+            calculatePrices();
+        }
+
+        function updateSeatInfoCard() {
+            const cardEmpty = document.getElementById('seat-card-empty');
+            const cardActive = document.getElementById('seat-card-active');
+            const badgeCount = document.getElementById('badge-selected-count');
+
+            if (!selectedSeatNo) {
+                cardEmpty.classList.remove('hidden');
+                cardActive.classList.add('hidden');
+                badgeCount.innerText = "0 Seats Selected";
+                return;
+            }
+
+            cardEmpty.classList.add('hidden');
+            cardActive.classList.remove('hidden');
+            badgeCount.innerText = "1 Seat Selected";
+
+            const seat = seatsState[selectedSeatNo];
+            let detailsKey = seat.class;
+            if (seat.class === 'ECONOMY' && seat.extraLegroom) detailsKey = 'ECONOMY_EXTRA';
+
+            const details = SEAT_DETAILS[detailsKey];
+
+            document.getElementById('seat-card-no').innerText = seat.seatNo;
+            document.getElementById('seat-card-class').innerText = details.name;
+
+            let positionType = "Standard Seat";
+            if (seat.seatNo.includes('A') || seat.seatNo.includes('K') || seat.seatNo.includes('F')) positionType = "Window Seat";
+            if (seat.seatNo.includes('C') || seat.seatNo.includes('D')) positionType = "Aisle Seat";
+            document.getElementById('seat-card-type').innerText = `${positionType} • ${seat.extraLegroom ? 'Extra Legroom' : 'Standard Pitch'}`;
+
+            document.getElementById('seat-card-price').innerText = details.fee > 0 ? `+${formatMoney(details.fee)}` : 'Included';
+            document.getElementById('cabin-img-preview').src = details.image;
+
+            const perksContainer = document.getElementById('seat-card-perks');
+            perksContainer.innerHTML = details.perks.map(p => `
+                <span class="bg-slate-100 border border-slate-200 text-slate-700 font-medium px-2 py-0.5 rounded-md">${p}</span>
+            `).join('');
+        }
+
+        function calculatePrices() {
+            const baseFareINR = activeFlight.baseFare;
+            let seatFeeINR = 0;
+
+            if (selectedSeatNo) {
+                const seat = seatsState[selectedSeatNo];
+                let detailsKey = seat.class;
+                if (seat.class === 'ECONOMY' && seat.extraLegroom) detailsKey = 'ECONOMY_EXTRA';
+                seatFeeINR = SEAT_DETAILS[detailsKey].fee;
+            }
+
+            const taxesINR = Math.round((baseFareINR + seatFeeINR) * 0.18);
+            
+            const loyalty = document.getElementById('passenger-loyalty').value;
+            let discountRate = 0;
+            if (loyalty === 'SILVER') discountRate = 0.05;
+            if (loyalty === 'GOLD') discountRate = 0.10;
+            if (loyalty === 'PLATINUM') discountRate = 0.15;
+
+            const subtotalINR = baseFareINR + seatFeeINR + taxesINR;
+            const discountAmountINR = Math.round(subtotalINR * discountRate);
+            const totalINR = subtotalINR - discountAmountINR;
+
+            document.getElementById('price-base').innerText = formatMoney(baseFareINR);
+            document.getElementById('price-seat').innerText = formatMoney(seatFeeINR);
+            document.getElementById('price-taxes').innerText = formatMoney(taxesINR);
+
+            const discRow = document.getElementById('row-discount');
+            if (discountAmountINR > 0) {
+                discRow.classList.remove('hidden');
+                document.getElementById('price-discount').innerText = `-${formatMoney(discountAmountINR)}`;
+            } else {
+                discRow.classList.add('hidden');
+            }
+
+            document.getElementById('price-total').innerText = formatMoney(totalINR);
+        }
+
+        function autoAssignSeat() {
+            const preference = document.getElementById('filter-preference').value;
+            const availableSeats = Object.values(seatsState).filter(s => !s.occupied);
+
+            if (availableSeats.length === 0) {
+                showToast("Cabin Full", "No seats available on this flight.", "fa-triangle-exclamation");
+                return;
+            }
+
+            let filtered = availableSeats;
+            if (preference === 'WINDOW') {
+                filtered = availableSeats.filter(s => s.seatNo.endsWith('A') || s.seatNo.endsWith('K') || s.seatNo.endsWith('F'));
+            } else if (preference === 'AISLE') {
+                filtered = availableSeats.filter(s => s.seatNo.endsWith('C') || s.seatNo.endsWith('D'));
+            } else if (preference === 'EXTRA_LEGROOM') {
+                filtered = availableSeats.filter(s => s.extraLegroom || s.class === 'FIRST' || s.class === 'BUSINESS');
+            }
+
+            const targetPool = filtered.length > 0 ? filtered : availableSeats;
+            const chosen = targetPool[Math.floor(Math.random() * targetPool.length)];
+
+            selectedSeatNo = chosen.seatNo;
+            renderCabinMap();
+            updateSeatInfoCard();
+            calculatePrices();
+            showToast("Seat Assigned", `Smart Engine selected seat ${selectedSeatNo} for you.`, "fa-wand-magic-sparkles");
+        }
+
+        /* ==========================================================================
+           5. BOOKING CONFIRMATION & PNR GENERATION
+           ========================================================================== */
+
+        function confirmBooking() {
+            const title = document.getElementById('passenger-title').value;
+            const firstName = document.getElementById('passenger-firstname').value.trim();
+            const middleName = document.getElementById('passenger-middlename').value.trim();
+            const lastName = document.getElementById('passenger-lastname').value.trim();
+
+            if (!firstName || !lastName) {
+                showToast("Name Required", "Please fill in First Name and Last Name.", "fa-circle-exclamation");
+                return;
+            }
+
+            if (!selectedSeatNo) {
+                showToast("Seat Required", "Please click on a seat to select it.", "fa-couch");
+                return;
+            }
+
+            const fullName = `${title} ${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim();
+            const pnr = "IN" + Math.random().toString(36).substring(2, 6).toUpperCase();
+            const seat = seatsState[selectedSeatNo];
+
+            seat.occupied = true;
+            seat.pnr = pnr;
+
+            let detailsKey = seat.class;
+            if (seat.class === 'ECONOMY' && seat.extraLegroom) detailsKey = 'ECONOMY_EXTRA';
+
+            const newBooking = {
+                pnr: pnr,
+                passenger: fullName,
+                flightNo: activeFlight.flightNo,
+                seatNo: selectedSeatNo,
+                class: SEAT_DETAILS[detailsKey].name,
+                date: document.getElementById('flight-date').value,
+                status: "CONFIRMED"
+            };
+
+            sampleBookings.unshift(newBooking);
+
+            selectedSeatNo = null;
+            document.getElementById('passenger-firstname').value = '';
+            document.getElementById('passenger-middlename').value = '';
+            document.getElementById('passenger-lastname').value = '';
+            document.getElementById('passenger-idnum').value = '';
+
+            renderCabinMap();
+            updateSeatInfoCard();
+            renderBookingsTable();
+            updateAnalytics();
+
+            openBoardingPass(pnr);
+            showToast("Booking Confirmed!", `Ticket generated with PNR ${pnr}.`, "fa-circle-check");
+        }
+
+        /* ==========================================================================
+           6. MANAGE BOOKINGS & BOARDING PASS MODAL
+           ========================================================================== */
+
+        function updateFlightDetails() {
+            const selectedFlightNo = document.getElementById('route-select').value;
+            activeFlight = FLIGHTS[selectedFlightNo];
+
+            document.getElementById('summary-flight-no').innerText = activeFlight.flightNo;
+            document.getElementById('summary-route').innerHTML = `${activeFlight.from} <i class="fa-solid fa-arrow-right text-brand-400 text-lg mx-2"></i> ${activeFlight.to}`;
+            document.getElementById('summary-aircraft').innerText = `${activeFlight.aircraft} • Widebody Fleet`;
+            document.getElementById('summary-dep-time').innerText = activeFlight.depTime;
+            document.getElementById('summary-arr-time').innerText = activeFlight.arrTime;
+            document.getElementById('summary-duration').innerText = activeFlight.duration;
+            document.getElementById('summary-dep-code').innerText = `${activeFlight.from} Terminal`;
+            document.getElementById('summary-arr-code').innerText = `${activeFlight.to} Terminal`;
+            document.getElementById('route-banner-img').src = activeFlight.image;
+
+            document.getElementById('price-badge-first').innerText = `+${formatMoney(SEAT_DETAILS.FIRST.fee)}`;
+            document.getElementById('price-badge-business').innerText = `+${formatMoney(SEAT_DETAILS.BUSINESS.fee)}`;
+            document.getElementById('price-badge-economy').innerText = `+${formatMoney(SEAT_DETAILS.ECONOMY.fee)}`;
+
+            selectedSeatNo = null;
+            initSeatsState();
+            initMockBookings();
+            renderCabinMap();
+            updateSeatInfoCard();
+            calculatePrices();
+            updateAnalytics();
+        }
+
+        function renderBookingsTable() {
+            const tbody = document.getElementById('bookings-tbody');
+            tbody.innerHTML = '';
+
+            if (sampleBookings.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">No active bookings found.</td></tr>`;
+                return;
+            }
+
+            sampleBookings.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="p-3 font-mono font-bold text-brand-600">${b.pnr}</td>
+                    <td class="p-3 font-semibold text-slate-800">${b.passenger}</td>
+                    <td class="p-3 text-slate-600">${b.flightNo}</td>
+                    <td class="p-3"><span class="bg-brand-50 text-brand-700 font-bold px-2 py-0.5 rounded border border-brand-200">${b.seatNo}</span></td>
+                    <td class="p-3 text-slate-600">${b.class}</td>
+                    <td class="p-3 text-slate-500">${b.date}</td>
+                    <td class="p-3 text-right space-x-1">
+                        <button onclick="openBoardingPass('${b.pnr}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium transition">Pass</button>
+                        <button onclick="cancelBooking('${b.pnr}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded-lg font-medium transition">Cancel</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function openBoardingPass(pnr) {
+            const booking = sampleBookings.find(b => b.pnr === pnr);
+            if (!booking) return;
+
+            document.getElementById('bp-passenger-name').innerText = booking.passenger;
+            document.getElementById('bp-flight-no').innerText = booking.flightNo;
+            document.getElementById('bp-date').innerText = booking.date;
+            document.getElementById('bp-seat-no').innerText = booking.seatNo;
+            document.getElementById('bp-pnr').innerText = `PNR: ${booking.pnr}`;
+            document.getElementById('bp-class-tag').innerText = booking.class;
+
+            document.getElementById('modal-boarding-pass').classList.remove('hidden');
+        }
+
+        function closeBoardingPass() {
+            document.getElementById('modal-boarding-pass').classList.add('hidden');
+        }
+
+        function cancelBooking(pnr) {
+            const index = sampleBookings.findIndex(b => b.pnr === pnr);
+            if (index !== -1) {
+                const booking = sampleBookings[index];
+                if (seatsState[booking.seatNo]) {
+                    seatsState[booking.seatNo].occupied = false;
+                    seatsState[booking.seatNo].pnr = null;
+                }
+                sampleBookings.splice(index, 1);
+                renderCabinMap();
+                renderBookingsTable();
+                updateAnalytics();
+                showToast("Booking Cancelled", `PNR ${pnr} has been cancelled.`, "fa-trash");
+            }
+        }
+
+        function searchPNR() {
+            const query = document.getElementById('pnr-search-input').value.trim().toUpperCase();
+            if (!query) {
+                renderBookingsTable();
+                return;
+            }
+            const tbody = document.getElementById('bookings-tbody');
+            const filtered = sampleBookings.filter(b => b.pnr.includes(query) || b.passenger.toUpperCase().includes(query));
+            
+            tbody.innerHTML = '';
+            filtered.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="p-3 font-mono font-bold text-brand-600">${b.pnr}</td>
+                    <td class="p-3 font-semibold text-slate-800">${b.passenger}</td>
+                    <td class="p-3 text-slate-600">${b.flightNo}</td>
+                    <td class="p-3"><span class="bg-brand-50 text-brand-700 font-bold px-2 py-0.5 rounded border border-brand-200">${b.seatNo}</span></td>
+                    <td class="p-3 text-slate-600">${b.class}</td>
+                    <td class="p-3 text-slate-500">${b.date}</td>
+                    <td class="p-3 text-right space-x-1">
+                        <button onclick="openBoardingPass('${b.pnr}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium transition">Pass</button>
+                        <button onclick="cancelBooking('${b.pnr}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded-lg font-medium transition">Cancel</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        /* ==========================================================================
+           7. ANALYTICS & TAB SWITCHING
+           ========================================================================== */
+
+        function updateAnalytics() {
+            const allSeats = Object.values(seatsState);
+            const totalSeats = allSeats.length;
+            const occupiedSeats = allSeats.filter(s => s.occupied).length;
+            const loadFactor = Math.round((occupiedSeats / totalSeats) * 100);
+
+            let revenueINR = 0;
+            let firstCount = 0, firstOccupied = 0;
+            let busCount = 0, busOccupied = 0;
+            let ecoCount = 0, ecoOccupied = 0;
+
+            allSeats.forEach(s => {
+                let basePrice = activeFlight.baseFare;
+                let addFee = 0;
+                if (s.class === 'FIRST') {
+                    firstCount++;
+                    addFee = SEAT_DETAILS.FIRST.fee;
+                    if (s.occupied) firstOccupied++;
+                } else if (s.class === 'BUSINESS') {
+                    busCount++;
+                    addFee = SEAT_DETAILS.BUSINESS.fee;
+                    if (s.occupied) busOccupied++;
+                } else {
+                    ecoCount++;
+                    if (s.extraLegroom) addFee = SEAT_DETAILS.ECONOMY_EXTRA.fee;
+                    if (s.occupied) ecoOccupied++;
+                }
+
+                if (s.occupied) {
+                    revenueINR += (basePrice + addFee);
+                }
+            });
+
+            document.getElementById('kpi-load-factor').innerText = `${loadFactor}%`;
+            document.getElementById('kpi-total-revenue').innerText = formatMoney(revenueINR);
+            document.getElementById('kpi-seats-reserved').innerText = `${occupiedSeats} / ${totalSeats}`;
+            
+            const premiumRatio = Math.round(((firstOccupied + busOccupied) / (firstCount + busCount)) * 100);
+            document.getElementById('kpi-premium-occupancy').innerText = `${premiumRatio}%`;
+
+            const firstPct = Math.round((firstOccupied / firstCount) * 100);
+            document.getElementById('stat-first-occupancy').innerText = `${firstOccupied} / ${firstCount} Occupied (${firstPct}%)`;
+            document.getElementById('bar-first-occupancy').style.width = `${firstPct}%`;
+
+            const busPct = Math.round((busOccupied / busCount) * 100);
+            document.getElementById('stat-business-occupancy').innerText = `${busOccupied} / ${busCount} Occupied (${busPct}%)`;
+            document.getElementById('bar-business-occupancy').style.width = `${busPct}%`;
+
+            const ecoPct = Math.round((ecoOccupied / ecoCount) * 100);
+            document.getElementById('stat-economy-occupancy').innerText = `${ecoOccupied} / ${ecoCount} Occupied (${ecoPct}%)`;
+            document.getElementById('bar-economy-occupancy').style.width = `${ecoPct}%`;
+        }
+
+        function switchTab(tab) {
+            ['booking', 'manage', 'analytics'].forEach(t => {
+                const content = document.getElementById(`tab-content-${t}`);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (t === tab) {
+                    content.classList.remove('hidden');
+                    btn.className = "px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition bg-white text-brand-700 shadow-sm border border-slate-200";
+                } else {
+                    content.classList.add('hidden');
+                    btn.className = "px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition";
+                }
+            });
+        }
+
+        function showToast(title, msg, iconClass = "fa-circle-info") {
+            const container = document.getElementById('toast-container');
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-msg').innerText = msg;
+            document.getElementById('toast-icon').className = `fa-solid ${iconClass} text-brand-600 text-lg`;
+
+            container.classList.remove('translate-y-[-20px]', 'opacity-0');
+            container.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                container.classList.remove('translate-y-0', 'opacity-100');
+                container.classList.add('translate-y-[-20px]', 'opacity-0');
+            }, 3500);
+        }
+
+        // Initialize on Load
+        window.onload = function() {
+            initSeatsState();
+            initMockBookings();
+            renderCabinMap();
+            updateSeatInfoCard();
+            calculatePrices();
+            renderBookingsTable();
+            updateAnalytics();
+        };
+    </script>
+</body>
+</html>
